@@ -980,6 +980,23 @@ func TestObservableLastOrDefaultWithValue(t *testing.T) {
 	assert.Exactly(t, 3, v)
 }
 
+func TestObservableTakeUntil(t *testing.T) {
+	everyOneSecond := new(mockDuration)
+	everyOneSecond.On("duration").Return(time.Second)
+
+	everyHalfSecond := new(mockDuration)
+	everyHalfSecond.On("duration").Return(500 * time.Millisecond)
+
+	repeatBreak := Just(1).Repeat(3, everyHalfSecond).Last()
+	repeat := Just(1, 2, 3).Repeat(3, everyOneSecond).TakeUntil(repeatBreak)
+
+	AssertThatObservable(t, repeat, HasItems(1, 2, 3, 1, 2, 3))
+	everyOneSecond.AssertNumberOfCalls(t, "duration", 2)
+	everyOneSecond.AssertExpectations(t)
+	everyHalfSecond.AssertNumberOfCalls(t, "duration", 3)
+	everyHalfSecond.AssertExpectations(t)
+}
+
 func TestObservableTakeWhile(t *testing.T) {
 	items := []interface{}{1, 2, 3, 4, 5}
 	it, err := iterable.New(items)

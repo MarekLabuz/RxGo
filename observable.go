@@ -63,6 +63,7 @@ type Observable interface {
 	SumInt64() Single
 	Take(nth uint) Observable
 	TakeLast(nth uint) Observable
+	TakeUntil(obs Observable) Observable
 	TakeWhile(apply Predicate) Observable
 	ToList() Observable
 	ToMap(keySelector Function) Observable
@@ -474,6 +475,40 @@ func (o *observable) LastOrDefault(defaultValue interface{}) Single {
 		close(out)
 	}()
 	return NewSingleFromChannel(out)
+}
+
+// TakeUntil emits items
+func (o *observable) TakeUntil(obs Observable) Observable {
+	out := make(chan interface{})
+	untilChan := make(chan interface{})
+	go func() {
+		for {
+			item, err := obs.Next()
+			if err != nil {
+				break
+			}
+			untilChan <- item
+			close(untilChan)
+			break
+		}
+	}()
+	go func() {
+	MainLoop:
+		for {
+			select {
+			case item, ok := <-o.ch:
+				if ok {
+					out <- item
+				} else {
+					break MainLoop
+				}
+			case <-untilChan:
+				break MainLoop
+			}
+		}
+		close(out)
+	}()
+	return &observable{ch: out}
 }
 
 // TakeWhile emits items emitted by an Observable as long as the
