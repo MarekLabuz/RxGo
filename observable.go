@@ -74,6 +74,7 @@ type Observable interface {
 	TakeLast(nth uint) Observable
 	TakeUntil(apply Predicate) Observable
 	TakeWhile(apply Predicate) Observable
+	TimeInterval() Observable
 	Timeout(duration Duration) Observable
 	ToChannel(opts ...options.Option) Channel
 	ToMap(keySelector Function) Single
@@ -1592,6 +1593,31 @@ func (o *observable) TakeWhile(apply Predicate) Observable {
 					continue
 				}
 				break
+			} else {
+				break
+			}
+		}
+		close(out)
+	}
+	return newColdObservableFromFunction(f)
+}
+
+// getTimestamp returns current timestamp in miliseconds
+func getTimestamp() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
+// TimeInterval returns an Observable that emits the amount of time elapsed between
+// emissions emitted by the source ObservableSource
+func (o *observable) TimeInterval() Observable {
+	f := func(out chan interface{}) {
+		it := o.Iterator(context.Background())
+		timeOfLastItem := getTimestamp()
+		for {
+			if _, err := it.Next(context.Background()); err == nil {
+				now := getTimestamp()
+				out <- now - timeOfLastItem
+				timeOfLastItem = now
 			} else {
 				break
 			}

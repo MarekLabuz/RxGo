@@ -2,6 +2,7 @@ package rxgo
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"sync"
@@ -1791,6 +1792,58 @@ var _ = Describe("Observable operators", func() {
 				observable.Subscribe(nextHandler(outNext))
 				Expect(pollItem(outNext, timeout)).Should(Equal(noData))
 			})
+		})
+	})
+
+	Context("when calling the TimeInterval operator on a synchronous observable", func() {
+		observable := Just(1, 2, 3, 4, 5).TimeInterval()
+		It("should produce a sequence of 0s", func() {
+			outNext, _, outDone := subscribe(observable)
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(noData))
+			Expect(pollItem(outDone, timeout)).Should(Equal(doneSignal))
+		})
+	})
+
+	Context("when calling the TimeInterval operator on an asynchronous observable", func() {
+		frequency := new(mockDuration)
+		frequency.On("duration").Return(100 * time.Millisecond)
+		observable := Just(1, 2).
+			Repeat(2, frequency).
+			TimeInterval().
+			Map(func(v interface{}) interface{} {
+				i, ok := v.(int64)
+				if ok {
+					// This convertion is necessary, because real time interval values are going to
+					// be like 102ms, 108ms, 101ms, 105ms etc - code below rounds them to 100ms
+					return int64(math.Floor(float64(i)/float64(10))) * 10
+				}
+				return v
+			})
+
+		It("should produce a sequence of timestamps", func() {
+			outNext, _, outDone := subscribe(observable)
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(100)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(100)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(int64(0)))
+			Expect(pollItem(outNext, timeout)).Should(Equal(noData))
+			Expect(pollItem(outDone, timeout)).Should(Equal(doneSignal))
+		})
+	})
+
+	Context("when calling the TimeInterval operator on an empty observable", func() {
+		observable := Empty().TimeInterval()
+		It("should not produce any items", func() {
+			outNext, _, outDone := subscribe(observable)
+			Expect(pollItem(outNext, timeout)).Should(Equal(noData))
+			Expect(pollItem(outDone, timeout)).Should(Equal(doneSignal))
 		})
 	})
 })
