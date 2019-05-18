@@ -1793,6 +1793,79 @@ var _ = Describe("Observable operators", func() {
 			})
 		})
 	})
+
+	Context("when calling the Switch operator with a synchronous sequence of observables", func() {
+		observable := Just(Just(1, 2, 3), Just(4, 5, 6), Just(7, 8, 9)).Switch()
+		It("should emit items of the last one", func() {
+			outNext, _, outDone := subscribe(observable)
+			Expect(pollItem(outNext, timeout)).Should(Equal(7))
+			Expect(pollItem(outNext, timeout)).Should(Equal(8))
+			Expect(pollItem(outNext, timeout)).Should(Equal(9))
+			Expect(pollItem(outNext, timeout)).Should(Equal(noData))
+			Expect(pollItem(outDone, timeout)).Should(Equal(doneSignal))
+		})
+	})
+
+	Context("when calling the Switch operator with an asynchronous sequence of observables", func() {
+		frequency100ms := new(mockDuration)
+		frequency100ms.On("duration").Return(100 * time.Millisecond)
+		frequency150ms := new(mockDuration)
+		frequency150ms.On("duration").Return(150 * time.Millisecond)
+		frequency200ms := new(mockDuration)
+		frequency200ms.On("duration").Return(200 * time.Millisecond)
+
+		ch := make(chan interface{})
+		observable := FromChannel(ch).Switch()
+		// Just(
+		// 	1, 2, 3,
+		// 	Just(1, 2, 3).
+		// 		Repeat(1, frequency100ms),
+		// ).
+		// 	Repeat(1, frequency200ms).
+		// 	Switch()
+
+		go func() {
+			ch <- Just(1, 2, 3).Repeat(1, frequency100ms)
+			time.Sleep(50 * time.Millisecond)
+			ch <- Just(4, 5, 6).Repeat(1, frequency100ms)
+			time.Sleep(150 * time.Millisecond)
+		}()
+
+		It("should emit items of the most-recently-emitted one", func() {
+			outNext, _, _ := subscribe(observable)
+			Expect(pollItem(outNext, timeout)).Should(Equal(1))
+			Expect(pollItem(outNext, timeout)).Should(Equal(2))
+			Expect(pollItem(outNext, timeout)).Should(Equal(3))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(4))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(5))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(6))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(4))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(5))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(6))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(2))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(3))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(4))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(5))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(6))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(1))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(2))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(3))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(4))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(5))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(6))
+			// Expect(pollItem(outNext, timeout)).Should(Equal(noData))
+			// Expect(pollItem(outDone, timeout)).Should(Equal(doneSignal))
+		})
+	})
+
+	// Context("when calling the Switch operator with an empy observable", func() {
+	// 	observable := Empty().Switch()
+	// 	It("should not produce any items", func() {
+	// 		outNext, _, outDone := subscribe(observable)
+	// 		Expect(pollItem(outNext, timeout)).Should(Equal(noData))
+	// 		Expect(pollItem(outDone, timeout)).Should(Equal(doneSignal))
+	// 	})
+	// })
 })
 
 var _ = Describe("StartWith operator", func() {

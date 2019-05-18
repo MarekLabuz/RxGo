@@ -269,6 +269,10 @@ func (c *connectableObservable) SumInt64() Single {
 	return c.observable.SumInt64()
 }
 
+func (c *connectableObservable) Switch() Observable {
+	return c.observable.Switch()
+}
+
 func (c *connectableObservable) Take(nth uint) Observable {
 	return c.observable.Take(nth)
 }
