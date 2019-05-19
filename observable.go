@@ -1503,16 +1503,62 @@ func (o *observable) SumFloat64() Single {
 	return newColdSingle(f)
 }
 
+// func aaa(in1, in2 <-chan interface{}) chan<- interface{} {
+// 	out := make(chan interface{})
+
+// 	// var item1 interface{}
+// 	// var item2 interface{}
+
+// 	go func() {
+// 		for {
+
+// 			item1, ok1 := <-in1
+
+// 			select {
+// 			case item, ok := <-in1:
+// 				if ok {
+// 					item1 = item
+// 				}
+// 			default:
+// 			}
+
+// 			select {
+// 			case item, ok := <-in2:
+// 				if ok {
+// 					item2 = item
+// 				}
+// 			default:
+// 			}
+
+// 			if item1 != nil && item2 != nil {
+// 				out <- item1
+// 				out <- item2
+// 			} else if item1 != nil && item2 == nil {
+
+// 			} else if item1 == nil && item2 != nil {
+
+// 			}
+// 		}
+// 	}()
+
+// 	return out
+// }
+
 // Switch returns an Observable that emits items emitted by the most-recently-emitted
 // Observable emitted by the source ObservableSource.
 func (o *observable) Switch() Observable {
 	oChan := make(chan interface{})
 	obsChan := make(chan interface{})
 
+	innerIt := newIteratorFromChannel(make(chan interface{}))
+	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
 		it := o.Iterator(context.Background())
 		for {
 			if item, err := it.Next(context.Background()); err == nil {
+				fmt.Println("start stream")
+				cancel()
 				oChan <- item
 			} else {
 				break
@@ -1521,138 +1567,48 @@ func (o *observable) Switch() Observable {
 		close(oChan)
 	}()
 
-	f := func(out chan interface{}) {
-		// var innerIt Iterator
-		// var ctx context.Context
-		// var cancel context.CancelFunc
-		// parentCtx := context.Background()
-
-		// isClosed := false
-		// fmt.Println()
-
-	mainLoop:
+	go func() {
 		for {
-			select {
-			case item, ok := <-oChan:
-				if ok {
-					innerIt := item.(Observable).Iterator(context.Background())
-					obsChan = make(chan interface{})
-					innerChan := obsChan
+			fmt.Println("awaiting stream")
+			item, ok := <-oChan
+			fmt.Println("received stream")
 
-					go func() {
-						for {
-							if item, err := innerIt.Next(context.Background()); err == nil {
-								innerChan <- item
-							} else {
-								close(innerChan)
-								return
-							}
+			if ok {
+				innerIt = item.(Observable).Iterator(context.Background())
+				ctx, cancel = context.WithCancel(context.Background())
+				obsChan = make(chan interface{})
+				innerChan := obsChan
+
+				go func() {
+					for {
+						if item, err := innerIt.Next(ctx); err == nil {
+							fmt.Println("inner", item)
+							innerChan <- item
+							fmt.Println("after inner", item)
+						} else {
+							fmt.Println(err)
+							close(innerChan)
+							break
 						}
-					}()
-
-					continue mainLoop
-				}
-			default:
-			}
-
-			select {
-			case item, ok := <-obsChan:
-				if ok {
-					out <- item
-				} else {
-					close(out)
-					break mainLoop
-				}
-			default:
+					}
+				}()
+			} else {
+				fmt.Println("end")
+				break
 			}
 		}
+	}()
 
-		// mainLoop:
-		// 	for {
-		// 		select {
-		// 		case item, ok := <-oChan:
-		// 			fmt.Println("received start stream 1")
-		// 			if ok {
-		// 				fmt.Println("start stream 1")
-		// 				spawnNew(item)
-		// 			} else {
-		// 				close(out)
-		// 				break mainLoop
-		// 			}
-		// 		default:
-		// 			fmt.Println("default")
-		// 			select {
-		// 			case item, ok := <-obsChan:
-		// 				if ok {
-		// 					fmt.Println("obsChan item", item)
-		// 					out <- item
-		// 				} else {
-		// 					fmt.Println("obsChan closed")
-		// 					close(out)
-		// 					break mainLoop
-		// 				}
-		// 			case item, ok := <-oChan:
-		// 				fmt.Println("received start stream 2")
-		// 				if ok {
-		// 					fmt.Println("start stream 2")
-		// 					spawnNew(item)
-		// 				} else {
-		// 					close(out)
-		// 					break mainLoop
-		// 				}
-		// 			}
-		// 		}
-
-		// if isClosed {
-		// 	break
-		// }
-		// }
-
-		// close(out)
-
-		// it := o.Iterator(context.Background())
-		// var innerIt Iterator
-		// var ctx context.Context
-		// var cancel context.CancelFunc
-
-		// parentCtx := context.Background()
-		// isClosed := false
-
-		// for {
-		// 	if isClosed {
-		// 		break
-		// 	}
-
-		// 	if item, err := it.Next(parentCtx); err == nil {
-		// 		if ctx != nil && cancel != nil {
-		// 			cancel()
-		// 		}
-
-		// 		innerIt = item.(Observable).Iterator(parentCtx)
-		// 		ctx, cancel = context.WithCancel(parentCtx)
-
-		// 		go func() {
-		// 			for {
-		// 				if item, err := innerIt.Next(ctx); err == nil {
-		// 					fmt.Println(item)
-		// 					out <- item
-		// 				} else {
-		// 					if err.Error() != "TimeoutError" {
-		// 						fmt.Println(err.Error())
-		// 						isClosed = true
-		// 					}
-		// 					break
-		// 				}
-		// 			}
-		// 			// close(out)
-		// 		}()
-		// 	} else {
-		// 		// cancel()
-		// 		break
-		// 	}
-		// }
-
-		// close(out)
+	f := func(out chan interface{}) {
+		for {
+			item, ok := <-obsChan
+			if ok {
+				out <- item
+			} else {
+				close(out)
+				break
+			}
+		}
 	}
 
 	return newColdObservableFromFunction(f)
